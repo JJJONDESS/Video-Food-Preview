@@ -6,37 +6,25 @@
 <title>Video AR</title>
 <style>
   html, body { margin: 0; height: 100%; background: #1c1410; color: #fff; font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; }
-  
-  /* Start Screen */
   #startScreen { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; background: #1c1410; }
-  #startScreen h1 { margin-bottom: 10px; font-size: 1.5rem; }
-  #startScreen p { color: #ccc; margin-bottom: 30px; max-width: 300px; }
   button { font: inherit; font-weight: 600; border: 0; border-radius: 999px; padding: 14px 28px; margin: 6px; background: #e8452c; color: #fff; cursor: pointer; }
-  button:active { opacity: 0.8; }
-  button:disabled { background: #555; cursor: wait; }
-  
-  /* AR UI */
   #arUI { display: none; position: fixed; inset: 0; z-index: 20; pointer-events: none; }
   #hud { position: fixed; bottom: 30px; left: 0; right: 0; display: flex; justify-content: center; gap: 10px; pointer-events: auto; }
   #hud button { background: rgba(0,0,0,0.7); border: 1px solid #fff; font-size: 0.9rem; padding: 10px 20px; }
-  #hint { position: fixed; top: 20px; left: 0; right: 0; text-align: center; color: #fff; text-shadow: 0 1px 4px #000; pointer-events: none; font-weight: bold; }
-  
+  #hint { position: fixed; top: 20px; left: 0; right: 0; text-align: center; color: #fff; text-shadow: 0 1px 4px #000; font-weight: bold; }
   .a-enter-vr, .a-enter-ar { display: none !important; }
 </style>
-
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 </head>
 <body>
 
-<!-- Start Screen -->
 <div id="startScreen">
   <h1>Video AR Test</h1>
-  <p>Point your camera at the target image to see the video.</p>
-  <button id="startBtn" disabled>Loading AR Engine...</button>
+  <p>Point your camera at the target image.</p>
+  <button id="startBtn">Start Camera</button>
 </div>
 
-<!-- AR HUD -->
 <div id="arUI">
   <div id="hint">Point at the target image</div>
   <div id="hud">
@@ -45,13 +33,12 @@
   </div>
 </div>
 
-<!-- AR SCENE -->
 <a-scene id="scene" mindar-image="imageTargetSrc: dishes/mcart-targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;" 
-         color-space="sRGB" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+         color-space="sRGB" vr-mode-ui="enabled: false">
   
   <a-assets>
-    <!-- PUBLIC TEST VIDEO: Swap this link with 'dishes/your-video.mp4' later -->
-    <video id="arVideo" src="dishes/Burgeranimitedvideo.webm" preload="auto" loop="true" muted="true" playsinline crossorigin="anonymous"></video>
+    <!-- Your video link goes here -->
+    <video id="arVideo" src="dishes/pizza-video.mp4" preload="metadata" loop="true" muted="true" playsinline crossorigin="anonymous"></video>
   </a-assets>
 
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -59,7 +46,6 @@
 
   <a-entity id="target" mindar-image-target="targetIndex: 0">
     <a-entity id="videoWrapper">
-      <!-- Width 4, Height 3 -->
       <a-video src="#arVideo" width="4" height="3" position="0 0 0"></a-video>
     </a-entity>
   </a-entity>
@@ -69,116 +55,89 @@
   const startScreen = document.getElementById('startScreen');
   const arUI = document.getElementById('arUI');
   const startBtn = document.getElementById('startBtn');
-  const exitBtn = document.getElementById('exitBtn');
-  const detachBtn = document.getElementById('detachBtn');
-  const hint = document.getElementById('hint');
-  
   const scene = document.getElementById('scene');
   const videoEl = document.getElementById('arVideo');
-  const target = document.getElementById('target');
-  const videoWrapper = document.getElementById('videoWrapper');
-  const camera = document.querySelector('a-camera');
 
-  let isDetached = false;
-  let isFound = false;
-  let zv = 1;
-
-  // Wait for A-Frame and the video to fully load before enabling the button
-  scene.addEventListener('renderstart', () => {
-    startBtn.disabled = false;
-    startBtn.textContent = "Start Camera";
-  });
-
-  // Start Camera
-  startBtn.onclick = () => {
+  startBtn.onclick = async () => {
     startBtn.textContent = "Starting...";
-    startScreen.style.display = 'none';
-    arUI.style.display = 'block';
     
-    const system = scene.systems['mindar-image-system'];
-    system.start();
-  };
-
-  // Exit AR
-  exitBtn.onclick = () => {
-    location.reload();
-  };
-
-  // Target Found / Lost
-  target.addEventListener('targetFound', () => {
-    isFound = true;
-    videoEl.play().catch(e => console.log("Play error:", e)); 
-    if (!isDetached) hint.textContent = "Drag to move video";
-  });
-
-  target.addEventListener('targetLost', () => {
-    isFound = false;
-    videoEl.pause(); 
-    if (!isDetached) hint.textContent = "Point at the target image";
-  });
-
-  // Detach Logic
-  detachBtn.onclick = () => {
-    if (!isDetached) {
-      if (!isFound) { hint.textContent = "Point at the marker first!"; return; }
+    try {
+      // 1. Force the camera to open
+      const system = scene.systems['mindar-image-system'];
+      await system.start(); 
       
-      camera.object3D.attach(videoWrapper.object3D);
+      // 2. Hide start screen only if camera worked
+      startScreen.style.display = 'none';
+      arUI.style.display = 'block';
       
-      isDetached = true;
-      detachBtn.textContent = "Attach Back";
-      detachBtn.style.background = "#1fa855";
-      hint.textContent = "Drag to move video";
-    } else {
-      target.object3D.add(videoWrapper.object3D);
-      videoWrapper.object3D.position.set(0, 0, 0);
-      videoWrapper.object3D.rotation.set(0, 0, 0);
-      videoWrapper.object3D.scale.set(1, 1, 1);
-      
-      isDetached = false;
-      zv = 1;
-      detachBtn.textContent = "Detach Video";
-      detachBtn.style.background = "rgba(0,0,0,0.7)";
-      hint.textContent = "Point at the target image";
-      
-      if (isFound) videoEl.play().catch(e => console.log(e));
+    } catch (error) {
+      console.error(error);
+      alert("Camera failed to open. Error: " + error.message);
+      startBtn.textContent = "Try Again";
     }
   };
 
-  // Gesture Controls (Pan and Zoom)
-  const pts = new Map(); 
-  let lastD = 0;
-  const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  // Target Found / Lost logic
+  scene.addEventListener('arReady', () => {
+    console.log("AR is ready");
+  });
 
+  document.getElementById('target').addEventListener('targetFound', () => {
+    document.getElementById('hint').textContent = "Drag to move video";
+    videoEl.play().catch(e => console.log("Video play blocked:", e));
+  });
+
+  document.getElementById('target').addEventListener('targetLost', () => {
+    document.getElementById('hint').textContent = "Point at the target image";
+    videoEl.pause(); 
+  });
+
+  // Detach logic
+  let isDetached = false;
+  let isFound = false;
+  document.getElementById('target').addEventListener('targetFound', () => isFound = true);
+  document.getElementById('target').addEventListener('targetLost', () => isFound = false);
+
+  document.getElementById('detachBtn').onclick = () => {
+    const wrapper = document.getElementById('videoWrapper');
+    const camera = document.querySelector('a-camera');
+    const target = document.getElementById('target');
+    
+    if (!isDetached) {
+      if (!isFound) { alert("Point at the marker first!"); return; }
+      camera.object3D.attach(wrapper.object3D);
+      isDetached = true;
+      document.getElementById('detachBtn').textContent = "Attach Back";
+    } else {
+      target.object3D.add(wrapper.object3D);
+      wrapper.object3D.position.set(0, 0, 0);
+      wrapper.object3D.rotation.set(0, 0, 0);
+      wrapper.object3D.scale.set(1, 1, 1);
+      isDetached = false;
+      document.getElementById('detachBtn').textContent = "Detach Video";
+    }
+  };
+
+  document.getElementById('exitBtn').onclick = () => location.reload();
+
+  // Basic Drag to move (when detached)
+  const pts = new Map(); 
   window.addEventListener('pointerdown', e => {
     if (!isDetached || e.target.closest('button')) return;
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (pts.size === 2) lastD = dist();
   });
-
   window.addEventListener('pointermove', e => {
     const p = pts.get(e.pointerId); 
     if (!p) return;
-    
     const dx = e.clientX - p.x, dy = e.clientY - p.y;
     p.x = e.clientX; p.y = e.clientY;
-
     if (pts.size === 1) {
-      const o = videoWrapper.object3D.position;
+      const o = document.getElementById('videoWrapper').object3D.position;
       const f = scene.camera.projectionMatrix.elements[5];
-      const h = window.innerHeight;
-      const k = f ? (2 * (Math.abs(o.z) || 1)) / (f * h) : 0.002;
-      o.x += dx * k; 
-      o.y -= dy * k;
-    } else if (pts.size === 2) {
-      const d = dist();
-      const ratio = (lastD && d) ? d / lastD : 1;
-      const nz = Math.min(10, Math.max(0.1, zv * ratio));
-      zv = nz; 
-      lastD = d;
-      videoWrapper.object3D.scale.set(zv, zv, zv);
+      const k = f ? (2 * (Math.abs(o.z) || 1)) / (f * window.innerHeight) : 0.002;
+      o.x += dx * k; o.y -= dy * k;
     }
   });
-
   ['pointerup', 'pointercancel'].forEach(t => window.addEventListener(t, e => pts.delete(e.pointerId)));
 </script>
 </body>
