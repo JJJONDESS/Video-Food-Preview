@@ -31,6 +31,15 @@ const DISHES = {
     glbIos: 'dishes/VegPizza_ios-v1.glb',                       
     mind:   'dishes/VegPizza.mind',                     
     poster: 'dishes/VegPizzaimage.jpg'                      
+  },
+  
+    'video-dish': {
+    name: 'Special Video Pizza',
+    price: '2000',
+    description: 'Watch this pizza in action!',
+    video:  'videos/Burgeranimitedvideo.webm', // <--- YOUR VIDEO LINK HERE
+    mind:   'dishes/VegPizza.mind', // Use an existing AR target image
+    poster: 'dishes/VegPizzaimage.jpg'    // Use an existing image for the menu thumbnail
   }
 
 };
