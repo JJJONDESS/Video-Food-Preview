@@ -29,8 +29,8 @@ const DISHES = {
     price: '2000',
     description: 'Watch this pizza in action!',
     video:  'dishes/Burgeranimitedvideo.webm', // <--- YOUR VIDEO LINK HERE
-    mind:   'dishes/mcart-targets.mind', // Use an existing AR target image
-    poster: 'dishes/mcart-poster.jpg'    // Use an existing image for the menu thumbnail
+    mind:   'dishes/VegPizza.mind', // Use an existing AR target image
+    poster: 'dishes/VegPizzaimage.jpg'   // Use an existing image for the menu thumbnail
   }
 
 };
