@@ -329,12 +329,14 @@
   const mv = $('mv');
   const modelUrl = (isIOS && DISH.glbIos) ? DISH.glbIos : (DISH.glb || '');
 
-  // Start downloading the 3D model right now, at the same time as the 3D viewer library (not after it)
-  try {
-    const pl = document.createElement('link');
-    pl.rel = 'preload'; pl.as = 'fetch'; pl.href = modelUrl; pl.crossOrigin = 'anonymous';
-    document.head.appendChild(pl);
-  } catch (e) {}
+ // Only preload if there is actually a 3D model
+  if (modelUrl) {
+    try {
+      const pl = document.createElement('link');
+      pl.rel = 'preload'; pl.as = 'fetch'; pl.href = modelUrl; pl.crossOrigin = 'anonymous';
+      document.head.appendChild(pl);
+    } catch (e) {}
+  }
 
   // The poster picture is a plain image, so it appears as soon as it has downloaded (it does not wait for the 3D viewer)
   let posterImg = null;
@@ -355,8 +357,9 @@
   const dropPoster = () => { if (!posterImg) return; const p = posterImg; posterImg = null; p.style.opacity = '0'; setTimeout(() => p.remove(), 400); };
 
   let xrOK = false;
-  const checkAR = () => {
-    const ok = mv.canActivateAR && (isIOS || (SHOW_AR_ON_ANDROID && xrOK));
+   const checkAR = () => {
+    let ok = mv.canActivateAR && (isIOS || (SHOW_AR_ON_ANDROID && xrOK));
+    if (DISH.video && isIOS) ok = false; // Hide iOS AR button for video dishes
     $('ar').style.display = ok ? '' : 'none';
     $('ar2').style.display = ok ? '' : 'none';
   };
@@ -395,7 +398,17 @@
     $('sub').textContent = 'Point your camera at a dish photo on the menu.';
     heroDone();
   });
-  if (modelUrl) { mv.setAttribute('src', modelUrl); }
+   if (modelUrl) {
+    // It's a 3D model, load it normally
+    mv.setAttribute('src', modelUrl);
+  } else if (DISH.video) {
+    // It's a VIDEO! Skip the 3D viewer entirely so it doesn't freeze
+    $('sub').textContent = 'Tap "Scan the menu photo" to see the video in AR!';
+    $('skip').style.display = 'none'; // Hide "View 3D without camera" because there is no 3D model
+    $('go').textContent = 'Scan to play video';
+    dropPoster();
+    heroDone(); // This tells the system the "loading" is done and allows the camera to start
+  }
 else if (DISH.video) { 
     // If it's a video dish, hide the 3D viewer and show the poster instantly
     $('sub').textContent = 'Tap "Scan the menu photo" to see the video in AR!';
