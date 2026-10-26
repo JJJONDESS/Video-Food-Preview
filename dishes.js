@@ -5,15 +5,6 @@ const RESTAURANT = {
 };
 
 const DISHES = {
-  
-  'mcart': {                                                      
-    name: 'McArt Pizza',
-    price: '1800', description: 'Freshly baked McArt signature pizza', ingredients: 'Cheese, Crust, Pizza Sauce, Savory Pepperoni', allergens: 'Gluten, Dairy',    
-    glb:    'dishes/mcart_small-v1.glb',                          
-    glbIos: 'dishes/mcart_ios-v1.glb',                           
-    mind:   'dishes/mcart-targets.mind',                        
-    poster: 'dishes/mcart-poster.jpg'                          
-  },
 
   'Mr-Pizza': {                                                       
     name: 'MR-Pizza-Mayu',
@@ -38,8 +29,8 @@ const DISHES = {
     price: '2000',
     description: 'Watch this pizza in action!',
     video:  'videos/Burgeranimitedvideo.webm', // <--- YOUR VIDEO LINK HERE
-    mind:   'dishes/VegPizza.mind', // Use an existing AR target image
-    poster: 'dishes/VegPizzaimage.jpg'    // Use an existing image for the menu thumbnail
+    mind:   'dishes/mcart-targets.mind', // Use an existing AR target image
+    poster: 'dishes/mcart-poster.jpg'    // Use an existing image for the menu thumbnail
   }
 
 };
