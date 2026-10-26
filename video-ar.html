@@ -22,20 +22,28 @@
   #hint { position: fixed; top: 20px; left: 0; right: 0; text-align: center; color: #fff; text-shadow: 0 1px 4px #000; font-weight: bold; }
   #errorBox { color: #ff6b6b; font-size: 0.9rem; margin-top: 20px; font-weight: bold; max-width: 300px; }
   .a-enter-vr, .a-enter-ar { display: none !important; }
+  
+  /* Hide the video element in the background */
+  #arVideo { display: none; }
 </style>
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 <script>
-  // NEW SHADER: Checks pixel brightness instead of exact color match
+  // Custom Shader to remove the black background
   AFRAME.registerShader('chromakey', {
     schema: {
       src: { type: 'map' },
-      similarity: { type: 'number', default: 0.25 } // Removes anything darker than 25%
+      similarity: { type: 'number', default: 0.25 }
     },
     init: function (data) {
+      // Create a VideoTexture specifically for the shader
+      const texture = new THREE.VideoTexture(document.getElementById('arVideo'));
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+
       this.material = new THREE.ShaderMaterial({
         uniforms: {
-          uMap: { value: data.src },
+          uMap: { value: texture },
           uSimilarity: { value: data.similarity }
         },
         vertexShader: `
@@ -51,10 +59,9 @@
           varying vec2 vUv;
           void main() {
             vec4 texColor = texture2D(uMap, vUv);
-            // Calculate the brightness of the pixel (0.0 to 1.0)
             float brightness = (texColor.r + texColor.g + texColor.b) / 3.0;
             
-            // If it's too dark (black or dark grey), make it invisible
+            // Delete the black background
             if (brightness < uSimilarity) {
               discard;
             }
@@ -64,18 +71,14 @@
         transparent: true,
         side: THREE.DoubleSide
       });
-      this.update(data);
-    },
-    update: function (data) {
-      if (this.material) {
-        this.material.uniforms.uMap.value = data.src;
-        this.material.uniforms.uSimilarity.value = data.similarity;
-      }
     }
   });
 </script>
 </head>
 <body>
+
+<!-- Video placed outside of A-Frame assets so it doesn't block loading -->
+<video id="arVideo" src="dishes/Burgeranimitedvideo.webm" loop muted playsinline crossorigin="anonymous"></video>
 
 <div id="startScreen">
   <h1>Video AR Test</h1>
@@ -95,19 +98,17 @@
 <a-scene id="scene" mindar-image="imageTargetSrc: dishes/VegPizza.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.001; filterBeta: 0.01;" 
          color-space="sRGB" vr-mode-ui="enabled: false">
   
-  <a-assets>
-    <video id="arVideo" src="dishes/Burgeranimitedvideo.webm" preload="auto" loop="true" muted="true" playsinline crossorigin="anonymous"></video>
-  </a-assets>
+  <!-- Notice: No <a-assets> block anymore! -->
 
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
   <a-light type="ambient" intensity="1.2"></a-light>
 
   <a-entity id="target" mindar-image-target="targetIndex: 0">
     <a-entity id="videoWrapper">
-      <!-- Uses the new shader -->
+      <!-- Using the custom shader -->
       <a-entity 
         geometry="primitive: plane; width: 2; height: 1.5" 
-        material="shader: chromakey; src: #arVideo; similarity: 0.3;">
+        material="shader: chromakey; similarity: 0.3;">
       </a-entity>
     </a-entity>
   </a-entity>
@@ -124,7 +125,8 @@
   const videoWrapper = document.getElementById('videoWrapper');
   const camera = document.querySelector('a-camera');
 
-  scene.addEventListener('renderstart', () => {
+  // FIXED: Use 'loaded' instead of 'renderstart' so it doesn't wait for video download
+  scene.addEventListener('loaded', () => {
     startBtn.disabled = false;
     startBtn.textContent = "Start Camera";
   });
@@ -132,6 +134,8 @@
   startBtn.onclick = async () => {
     startBtn.textContent = "Starting...";
     errorBox.textContent = "";
+    
+    // Play the video immediately on click (bypasses browser autoplay block)
     videoEl.play().catch(e => console.log("Autoplay error:", e));
 
     try {
@@ -167,12 +171,12 @@
     if (!isDetached) {
       if (!isFound) { alert("Point at the marker first!"); return; }
       
-      // DETACH FIX: Force the video to a safe distance (1.5 meters) and normal size
       camera.object3D.attach(videoWrapper.object3D);
       
-      videoWrapper.object3D.position.set(0, 0, -1.5); // 1.5 meters directly in front of you
+      // Fixed position and scale
+      videoWrapper.object3D.position.set(0, 0, -1.5); 
       videoWrapper.object3D.rotation.set(0, 0, 0);
-      videoWrapper.object3D.scale.set(1, 1, 1); // Normal 2x1.5 meter size
+      videoWrapper.object3D.scale.set(1, 1, 1); 
       
       isDetached = true;
       document.getElementById('detachBtn').textContent = "Attach Back";
@@ -215,7 +219,7 @@
       const k = f ? (2 * (Math.abs(o.z) || 1)) / (f * window.innerHeight) : 0.002;
       o.x += dx * k; 
       o.y -= dy * k;
-      if (o.z > -0.5) o.z = -0.5; // Safety limit so you don't push it behind you
+      if (o.z > -0.5) o.z = -0.5; 
     } else if (pts.size === 2) {
       const d = dist();
       const ratio = (lastD && d) ? d / lastD : 1;
