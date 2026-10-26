@@ -20,7 +20,7 @@
   #hud { position: fixed; bottom: 30px; left: 0; right: 0; display: flex; justify-content: center; gap: 10px; pointer-events: auto; }
   #hud button { background: rgba(0,0,0,0.7); border: 1px solid #fff; font-size: 0.9rem; padding: 10px 20px; }
   #hint { position: fixed; top: 20px; left: 0; right: 0; text-align: center; color: #fff; text-shadow: 0 1px 4px #000; font-weight: bold; }
-  #errorBox { color: #ff6b6b; font-size: 0.9rem; margin-top: 20px; font-weight: bold; max-width: 300px; word-wrap: break-word; }
+  #errorBox { color: #ff6b6b; font-size: 0.9rem; margin-top: 20px; font-weight: bold; max-width: 300px; }
   .a-enter-vr, .a-enter-ar { display: none !important; }
 </style>
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
@@ -43,13 +43,12 @@
   </div>
 </div>
 
-<!-- REPLACE THE MIND FILE NAME BELOW WITH YOUR NEW TARGET FILE -->
-<a-scene id="scene" mindar-image="imageTargetSrc: dishes/VegPizza.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;" 
+<!-- CHANGED: filterMinCF and filterBeta to make the tracking smooth and non-shaky -->
+<a-scene id="scene" mindar-image="imageTargetSrc: dishes/my-new-target.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.001; filterBeta: 0.01;" 
          color-space="sRGB" vr-mode-ui="enabled: false">
   
   <a-assets>
-    <!-- REPLACE THIS LINK WITH YOUR .WEBM VIDEO LINK -->
-    <video id="arVideo" src="dishes/Burgeranimitedvideo.webm" preload="auto" loop="true" muted="true" playsinline crossorigin="anonymous"></video>
+    <video id="arVideo" src="dishes/pizza-video.webm" preload="auto" loop="true" muted="true" playsinline crossorigin="anonymous"></video>
   </a-assets>
 
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -57,21 +56,21 @@
 
   <a-entity id="target" mindar-image-target="targetIndex: 0">
     <a-entity id="videoWrapper">
-      <!-- CHANGED THE SIZE HERE (1.5 width, 2 height) -->
-      <a-video src="#arVideo" width="1.5" height="1.5" position="0 0 0"></a-video>
+      <a-video src="#arVideo" width="1.5" height="2" position="0 0 0"></a-video>
     </a-entity>
   </a-entity>
 </a-scene>
 
 <script>
+  const scene = document.getElementById('scene');
   const startScreen = document.getElementById('startScreen');
   const arUI = document.getElementById('arUI');
   const startBtn = document.getElementById('startBtn');
   const errorBox = document.getElementById('errorBox');
-  const scene = document.getElementById('scene');
   const videoEl = document.getElementById('arVideo');
   const target = document.getElementById('target');
   const videoWrapper = document.getElementById('videoWrapper');
+  const camera = document.querySelector('a-camera');
 
   scene.addEventListener('renderstart', () => {
     startBtn.disabled = false;
@@ -83,7 +82,6 @@
     errorBox.textContent = "";
     try {
       const system = scene.systems['mindar-image-system'];
-      if (!system) throw new Error("MindAR system not loaded.");
       await system.start(); 
       startScreen.style.display = 'none';
       arUI.style.display = 'block';
@@ -95,7 +93,7 @@
 
   let isDetached = false;
   let isFound = false;
-  let zv = 1; // Zoom Variable
+  let zv = 1; 
 
   target.addEventListener('targetFound', () => {
     isFound = true;
@@ -110,16 +108,15 @@
   });
 
   document.getElementById('detachBtn').onclick = () => {
-    const camera = document.querySelector('a-camera');
-    
     if (!isDetached) {
       if (!isFound) { alert("Point at the marker first!"); return; }
       
-      // DETACH: Move from target to camera
+      // DETACH FIX: Attach to camera, but force it to a safe distance so we don't go "inside" the video
       camera.object3D.attach(videoWrapper.object3D);
       
-      // Move it slightly forward so it doesn't clip into the phone
-      videoWrapper.object3D.position.z = -1.5; 
+      // Place it exactly 1.5 meters in front of the user
+      videoWrapper.object3D.position.set(0, 0, -1.5); 
+      videoWrapper.object3D.rotation.set(0, 0, 0);
       
       isDetached = true;
       document.getElementById('detachBtn').textContent = "Attach Back";
@@ -140,7 +137,7 @@
 
   document.getElementById('exitBtn').onclick = () => location.reload();
 
-  // --- GESTURE CONTROLS (DRAG & PINCH) ---
+  // --- GESTURE CONTROLS ---
   const pts = new Map(); 
   let lastD = 0;
   const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
@@ -165,11 +162,14 @@
       const k = f ? (2 * (Math.abs(o.z) || 1)) / (f * window.innerHeight) : 0.002;
       o.x += dx * k; 
       o.y -= dy * k;
+      
+      // SAFETY FIX: Prevent the video from being dragged behind the camera
+      if (o.z > -0.2) o.z = -0.2; 
     } else if (pts.size === 2) {
       // TWO FINGERS: Pinch to zoom
       const d = dist();
       const ratio = (lastD && d) ? d / lastD : 1;
-      const nz = Math.min(5, Math.max(0.2, zv * ratio)); // Min 0.2, Max 5
+      const nz = Math.min(5, Math.max(0.2, zv * ratio)); 
       zv = nz; 
       lastD = d;
       videoWrapper.object3D.scale.set(zv, zv, zv);
