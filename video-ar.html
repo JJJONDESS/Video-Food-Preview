@@ -25,6 +25,55 @@
 </style>
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<script>
+  // 1. CUSTOM SHADER TO REMOVE BLACK BACKGROUND
+  AFRAME.registerShader('chromakey', {
+    schema: {
+      src: { type: 'map' },
+      color: { type: 'color', default: '#000000' },
+      similarity: { type: 'number', default: 0.2 }
+    },
+    init: function (data) {
+      this.material = new THREE.ShaderMaterial({
+        uniforms: {
+          uMap: { value: data.src },
+          uColor: { value: new THREE.Color(data.color) },
+          uSimilarity: { value: data.similarity }
+        },
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D uMap;
+          uniform vec3 uColor;
+          uniform float uSimilarity;
+          varying vec2 vUv;
+          void main() {
+            vec4 texColor = texture2D(uMap, vUv);
+            float dist = distance(texColor.rgb, uColor);
+            // If the pixel is close to black, make it transparent
+            float alpha = smoothstep(uSimilarity, uSimilarity + 0.1, dist);
+            gl_FragColor = vec4(texColor.rgb, alpha);
+          }
+        `,
+        transparent: true,
+        side: THREE.DoubleSide
+      });
+      this.update(data);
+    },
+    update: function (data) {
+      if (this.material) {
+        this.material.uniforms.uMap.value = data.src;
+        this.material.uniforms.uColor.value.set(data.color);
+        this.material.uniforms.uSimilarity.value = data.similarity;
+      }
+    }
+  });
+</script>
 </head>
 <body>
 
@@ -55,8 +104,11 @@
 
   <a-entity id="target" mindar-image-target="targetIndex: 0">
     <a-entity id="videoWrapper">
-      <!-- ADDED material="side: double" so it's visible from the back -->
-      <a-video src="#arVideo" width="1.5" height="2" position="0 0 0" material="side: double"></a-video>
+      <!-- 2. USING THE CUSTOM SHADER INSTEAD OF A-VIDEO -->
+      <a-entity 
+        geometry="primitive: plane; width: 2; height: 1.5" 
+        material="shader: chromakey; src: #arVideo; color: #000000; similarity: 0.2;">
+      </a-entity>
     </a-entity>
   </a-entity>
 </a-scene>
@@ -105,7 +157,7 @@
     isFound = false;
     if (!isDetached) {
       document.getElementById('hint').textContent = "Point at the target image";
-      videoEl.pause(); // ONLY pause if it is NOT detached
+      videoEl.pause(); 
     }
   });
 
@@ -113,18 +165,17 @@
     if (!isDetached) {
       if (!isFound) { alert("Point at the marker first!"); return; }
       
-      // DETACH
       camera.object3D.attach(videoWrapper.object3D);
       
-      // Force it exactly 1.5 meters in front of the camera, facing the user perfectly
-      videoWrapper.object3D.position.set(0, 0, -1.5); 
+      // 3. FIXED DETACH SIZE: Places video 0.8 meters in front of you, perfectly scaled
+      videoWrapper.object3D.position.set(0, 0, -0.8); 
       videoWrapper.object3D.rotation.set(0, 0, 0);
+      videoWrapper.object3D.scale.set(1, 1, 1); 
       
       isDetached = true;
       document.getElementById('detachBtn').textContent = "Attach Back";
       document.getElementById('hint').textContent = "Drag to move · Pinch to zoom";
     } else {
-      // ATTACH BACK
       target.object3D.add(videoWrapper.object3D);
       videoWrapper.object3D.position.set(0, 0, 0);
       videoWrapper.object3D.rotation.set(0, 0, 0);
@@ -141,7 +192,6 @@
 
   document.getElementById('exitBtn').onclick = () => location.reload();
 
-  // --- GESTURE CONTROLS ---
   const pts = new Map(); 
   let lastD = 0;
   const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
@@ -160,16 +210,13 @@
     p.x = e.clientX; p.y = e.clientY;
 
     if (pts.size === 1) {
-      // ONE FINGER: Drag to move
       const o = videoWrapper.object3D.position;
       const f = scene.camera.projectionMatrix.elements[5];
       const k = f ? (2 * (Math.abs(o.z) || 1)) / (f * window.innerHeight) : 0.002;
       o.x += dx * k; 
       o.y -= dy * k;
-      
-      if (o.z > -0.2) o.z = -0.2; // Safety lock
+      if (o.z > -0.2) o.z = -0.2; 
     } else if (pts.size === 2) {
-      // TWO FINGERS: Pinch to zoom
       const d = dist();
       const ratio = (lastD && d) ? d / lastD : 1;
       const nz = Math.min(5, Math.max(0.2, zv * ratio)); 
