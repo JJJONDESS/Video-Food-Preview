@@ -26,17 +26,25 @@
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 <script>
-  // 1. CUSTOM SHADER TO REMOVE BLACK BACKGROUND
+  // CUSTOM SHADER: Uses 'discard' to completely remove black pixels
   AFRAME.registerShader('chromakey', {
     schema: {
       src: { type: 'map' },
       color: { type: 'color', default: '#000000' },
-      similarity: { type: 'number', default: 0.2 }
+      similarity: { type: 'number', default: 0.15 }
     },
     init: function (data) {
+      let texture = data.src;
+      // Ensure we use a VideoTexture for videos
+      if (data.src && data.src.tagName === 'VIDEO') {
+        texture = new THREE.VideoTexture(data.src);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+      }
+
       this.material = new THREE.ShaderMaterial({
         uniforms: {
-          uMap: { value: data.src },
+          uMap: { value: texture },
           uColor: { value: new THREE.Color(data.color) },
           uSimilarity: { value: data.similarity }
         },
@@ -55,22 +63,28 @@
           void main() {
             vec4 texColor = texture2D(uMap, vUv);
             float dist = distance(texColor.rgb, uColor);
-            // If the pixel is close to black, make it transparent
-            float alpha = smoothstep(uSimilarity, uSimilarity + 0.1, dist);
-            gl_FragColor = vec4(texColor.rgb, alpha);
+            // If the pixel is close to black, discard it (make it invisible)
+            if (dist < uSimilarity) {
+              discard;
+            }
+            gl_FragColor = texColor;
           }
         `,
         transparent: true,
         side: THREE.DoubleSide
       });
-      this.update(data);
     },
     update: function (data) {
-      if (this.material) {
-        this.material.uniforms.uMap.value = data.src;
-        this.material.uniforms.uColor.value.set(data.color);
-        this.material.uniforms.uSimilarity.value = data.similarity;
+      if (!this.material) return;
+      let texture = data.src;
+      if (data.src && data.src.tagName === 'VIDEO') {
+        texture = new THREE.VideoTexture(data.src);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
       }
+      this.material.uniforms.uMap.value = texture;
+      this.material.uniforms.uColor.value.set(data.color);
+      this.material.uniforms.uSimilarity.value = data.similarity;
     }
   });
 </script>
@@ -104,10 +118,10 @@
 
   <a-entity id="target" mindar-image-target="targetIndex: 0">
     <a-entity id="videoWrapper">
-      <!-- 2. USING THE CUSTOM SHADER INSTEAD OF A-VIDEO -->
+      <!-- The plane is 2x1.5 ratio. The shader removes the black background -->
       <a-entity 
         geometry="primitive: plane; width: 2; height: 1.5" 
-        material="shader: chromakey; src: #arVideo; color: #000000; similarity: 0.2;">
+        material="shader: chromakey; src: #arVideo; color: #000000; similarity: 0.15;">
       </a-entity>
     </a-entity>
   </a-entity>
@@ -132,6 +146,10 @@
   startBtn.onclick = async () => {
     startBtn.textContent = "Starting...";
     errorBox.textContent = "";
+    
+    // FIX: Play the video immediately on click so the browser doesn't block it
+    videoEl.play().catch(e => console.log("Autoplay error:", e));
+
     try {
       const system = scene.systems['mindar-image-system'];
       await system.start(); 
@@ -150,15 +168,11 @@
   target.addEventListener('targetFound', () => {
     isFound = true;
     if (!isDetached) document.getElementById('hint').textContent = "Drag to move video";
-    videoEl.play().catch(e => console.log(e));
   });
 
   target.addEventListener('targetLost', () => {
     isFound = false;
-    if (!isDetached) {
-      document.getElementById('hint').textContent = "Point at the target image";
-      videoEl.pause(); 
-    }
+    if (!isDetached) document.getElementById('hint').textContent = "Point at the target image";
   });
 
   document.getElementById('detachBtn').onclick = () => {
@@ -167,7 +181,7 @@
       
       camera.object3D.attach(videoWrapper.object3D);
       
-      // 3. FIXED DETACH SIZE: Places video 0.8 meters in front of you, perfectly scaled
+      // Place video perfectly 0.8 meters in front of camera
       videoWrapper.object3D.position.set(0, 0, -0.8); 
       videoWrapper.object3D.rotation.set(0, 0, 0);
       videoWrapper.object3D.scale.set(1, 1, 1); 
@@ -185,8 +199,6 @@
       zv = 1;
       document.getElementById('detachBtn').textContent = "Detach Video";
       document.getElementById('hint').textContent = "Point at the target image";
-      
-      if (!isFound) videoEl.pause(); 
     }
   };
 
