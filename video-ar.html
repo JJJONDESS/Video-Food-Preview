@@ -43,7 +43,6 @@
   </div>
 </div>
 
-<!-- CHANGED: filterMinCF and filterBeta to make the tracking smooth and non-shaky -->
 <a-scene id="scene" mindar-image="imageTargetSrc: dishes/VegPizza.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.001; filterBeta: 0.01;" 
          color-space="sRGB" vr-mode-ui="enabled: false">
   
@@ -56,7 +55,8 @@
 
   <a-entity id="target" mindar-image-target="targetIndex: 0">
     <a-entity id="videoWrapper">
-      <a-video src="#arVideo" width="1.5" height="2" position="0 0 0"></a-video>
+      <!-- ADDED material="side: double" so it's visible from the back -->
+      <a-video src="#arVideo" width="1.5" height="2" position="0 0 0" material="side: double"></a-video>
     </a-entity>
   </a-entity>
 </a-scene>
@@ -103,18 +103,20 @@
 
   target.addEventListener('targetLost', () => {
     isFound = false;
-    if (!isDetached) document.getElementById('hint').textContent = "Point at the target image";
-    videoEl.pause(); 
+    if (!isDetached) {
+      document.getElementById('hint').textContent = "Point at the target image";
+      videoEl.pause(); // ONLY pause if it is NOT detached
+    }
   });
 
   document.getElementById('detachBtn').onclick = () => {
     if (!isDetached) {
       if (!isFound) { alert("Point at the marker first!"); return; }
       
-      // DETACH FIX: Attach to camera, but force it to a safe distance so we don't go "inside" the video
+      // DETACH
       camera.object3D.attach(videoWrapper.object3D);
       
-      // Place it exactly 1.5 meters in front of the user
+      // Force it exactly 1.5 meters in front of the camera, facing the user perfectly
       videoWrapper.object3D.position.set(0, 0, -1.5); 
       videoWrapper.object3D.rotation.set(0, 0, 0);
       
@@ -122,7 +124,7 @@
       document.getElementById('detachBtn').textContent = "Attach Back";
       document.getElementById('hint').textContent = "Drag to move · Pinch to zoom";
     } else {
-      // ATTACH BACK: Reset position and move back to target
+      // ATTACH BACK
       target.object3D.add(videoWrapper.object3D);
       videoWrapper.object3D.position.set(0, 0, 0);
       videoWrapper.object3D.rotation.set(0, 0, 0);
@@ -132,6 +134,8 @@
       zv = 1;
       document.getElementById('detachBtn').textContent = "Detach Video";
       document.getElementById('hint').textContent = "Point at the target image";
+      
+      if (!isFound) videoEl.pause(); 
     }
   };
 
@@ -163,8 +167,7 @@
       o.x += dx * k; 
       o.y -= dy * k;
       
-      // SAFETY FIX: Prevent the video from being dragged behind the camera
-      if (o.z > -0.2) o.z = -0.2; 
+      if (o.z > -0.2) o.z = -0.2; // Safety lock
     } else if (pts.size === 2) {
       // TWO FINGERS: Pinch to zoom
       const d = dist();
