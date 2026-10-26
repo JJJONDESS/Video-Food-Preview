@@ -8,10 +8,12 @@
   html, body { margin: 0; height: 100%; background: #1c1410; color: #fff; font-family: system-ui, sans-serif; overflow: hidden; touch-action: none; }
   #startScreen { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; background: #1c1410; }
   button { font: inherit; font-weight: 600; border: 0; border-radius: 999px; padding: 14px 28px; margin: 6px; background: #e8452c; color: #fff; cursor: pointer; }
+  button:disabled { background: #555; }
   #arUI { display: none; position: fixed; inset: 0; z-index: 20; pointer-events: none; }
   #hud { position: fixed; bottom: 30px; left: 0; right: 0; display: flex; justify-content: center; gap: 10px; pointer-events: auto; }
   #hud button { background: rgba(0,0,0,0.7); border: 1px solid #fff; font-size: 0.9rem; padding: 10px 20px; }
   #hint { position: fixed; top: 20px; left: 0; right: 0; text-align: center; color: #fff; text-shadow: 0 1px 4px #000; font-weight: bold; }
+  #errorBox { color: #ff6b6b; font-size: 0.9rem; margin-top: 20px; font-weight: bold; max-width: 300px; word-wrap: break-word; }
   .a-enter-vr, .a-enter-ar { display: none !important; }
 </style>
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
@@ -22,7 +24,8 @@
 <div id="startScreen">
   <h1>Video AR Test</h1>
   <p>Point your camera at the target image.</p>
-  <button id="startBtn">Start Camera</button>
+  <button id="startBtn" disabled>Loading Engine...</button>
+  <div id="errorBox"></div>
 </div>
 
 <div id="arUI">
@@ -37,8 +40,8 @@
          color-space="sRGB" vr-mode-ui="enabled: false">
   
   <a-assets>
-    <!-- Your video link goes here -->
-    <video id="arVideo" src="dishes/pizza-video.mp4" preload="metadata" loop="true" muted="true" playsinline crossorigin="anonymous"></video>
+    <!-- UPDATE YOUR VIDEO PATH HERE (I see you are using webm) -->
+    <video id="arVideo" src="dishes/pizza-video.webm" preload="auto" loop="true" muted="true" playsinline crossorigin="anonymous"></video>
   </a-assets>
 
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -55,39 +58,52 @@
   const startScreen = document.getElementById('startScreen');
   const arUI = document.getElementById('arUI');
   const startBtn = document.getElementById('startBtn');
+  const errorBox = document.getElementById('errorBox');
   const scene = document.getElementById('scene');
   const videoEl = document.getElementById('arVideo');
 
+  // Wait for A-Frame to be 100% ready
+  scene.addEventListener('renderstart', () => {
+    startBtn.disabled = false;
+    startBtn.textContent = "Start Camera";
+  });
+
+  // Catch ANY error and print it on the screen
+  window.addEventListener('unhandledrejection', function(event) {
+    errorBox.textContent = "Error: " + (event.reason.message || event.reason);
+  });
+
   startBtn.onclick = async () => {
     startBtn.textContent = "Starting...";
+    errorBox.textContent = "";
     
     try {
-      // 1. Force the camera to open
       const system = scene.systems['mindar-image-system'];
+      if (!system) throw new Error("MindAR system not loaded.");
+      
+      // Start the camera
       await system.start(); 
       
-      // 2. Hide start screen only if camera worked
+      // If successful, hide start screen
       startScreen.style.display = 'none';
       arUI.style.display = 'block';
       
     } catch (error) {
       console.error(error);
-      alert("Camera failed to open. Error: " + error.message);
+      // Show error on screen
+      errorBox.textContent = "Camera Error: " + (error.message || error.name || error);
       startBtn.textContent = "Try Again";
     }
   };
 
   // Target Found / Lost logic
-  scene.addEventListener('arReady', () => {
-    console.log("AR is ready");
-  });
-
-  document.getElementById('target').addEventListener('targetFound', () => {
+  const target = document.getElementById('target');
+  target.addEventListener('targetFound', () => {
     document.getElementById('hint').textContent = "Drag to move video";
     videoEl.play().catch(e => console.log("Video play blocked:", e));
   });
 
-  document.getElementById('target').addEventListener('targetLost', () => {
+  target.addEventListener('targetLost', () => {
     document.getElementById('hint').textContent = "Point at the target image";
     videoEl.pause(); 
   });
@@ -95,13 +111,12 @@
   // Detach logic
   let isDetached = false;
   let isFound = false;
-  document.getElementById('target').addEventListener('targetFound', () => isFound = true);
-  document.getElementById('target').addEventListener('targetLost', () => isFound = false);
+  target.addEventListener('targetFound', () => isFound = true);
+  target.addEventListener('targetLost', () => isFound = false);
 
   document.getElementById('detachBtn').onclick = () => {
     const wrapper = document.getElementById('videoWrapper');
     const camera = document.querySelector('a-camera');
-    const target = document.getElementById('target');
     
     if (!isDetached) {
       if (!isFound) { alert("Point at the marker first!"); return; }
@@ -119,26 +134,6 @@
   };
 
   document.getElementById('exitBtn').onclick = () => location.reload();
-
-  // Basic Drag to move (when detached)
-  const pts = new Map(); 
-  window.addEventListener('pointerdown', e => {
-    if (!isDetached || e.target.closest('button')) return;
-    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  });
-  window.addEventListener('pointermove', e => {
-    const p = pts.get(e.pointerId); 
-    if (!p) return;
-    const dx = e.clientX - p.x, dy = e.clientY - p.y;
-    p.x = e.clientX; p.y = e.clientY;
-    if (pts.size === 1) {
-      const o = document.getElementById('videoWrapper').object3D.position;
-      const f = scene.camera.projectionMatrix.elements[5];
-      const k = f ? (2 * (Math.abs(o.z) || 1)) / (f * window.innerHeight) : 0.002;
-      o.x += dx * k; o.y -= dy * k;
-    }
-  });
-  ['pointerup', 'pointercancel'].forEach(t => window.addEventListener(t, e => pts.delete(e.pointerId)));
 </script>
 </body>
 </html>
