@@ -327,7 +327,7 @@
 
   // ---------- Step 1: the 3D dish (loads first) ----------
   const mv = $('mv');
-  const modelUrl = (isIOS && DISH.glbIos) ? DISH.glbIos : DISH.glb;
+  const modelUrl = (isIOS && DISH.glbIos) ? DISH.glbIos : (DISH.glb || '');
 
   // Start downloading the 3D model right now, at the same time as the 3D viewer library (not after it)
   try {
@@ -395,7 +395,12 @@
     $('sub').textContent = 'Point your camera at a dish photo on the menu.';
     heroDone();
   });
-  mv.setAttribute('src', modelUrl);   // optional: separate iPhone model (glbIos: '...' in dishes.js)
+  if (modelUrl) { mv.setAttribute('src', modelUrl); }
+else if (DISH.video) { 
+    // If it's a video dish, hide the 3D viewer and show the poster instantly
+    $('sub').textContent = 'Tap "Scan the menu photo" to see the video in AR!';
+    dropPoster(); 
+}
   setTimeout(() => { if (!heroFinished && (!isIOS || PRELOAD_AR_ON_IOS || wantAR)) startEngine(); }, 25000);   // safety: do not wait forever on a very slow connection
 
   // Android: ask the browser whether this phone supports AR (ARCore). If not, the button stays hidden.
@@ -433,12 +438,27 @@
   // Builds the AR scene for this dish (after the libraries have loaded)
   function buildScene() {
     const rot = DISH.rotation || '90 0 0', pos = DISH.position || '0 0 0.02', sc = DISH.scale || '2 2 2';
+    
+    // Check if this dish is a video or a 3D model
+    let assetHTML = '';
+    let entityHTML = '';
+
+    if (DISH.video) {
+      // It's a video!
+      assetHTML = `<video id="arVideo" src="${DISH.video}" preload="auto" loop="true" muted="true" playsinline crossorigin="anonymous"></video>`;
+      entityHTML = `<a-video src="#arVideo" width="4" height="3" position="0 0 0"></a-video>`;
+    } else {
+      // It's a 3D model
+      assetHTML = `<a-asset-item id="dish" src="${DISH.glb}"></a-asset-item>`;
+      entityHTML = `<a-gltf-model src="#dish" rotation="${rot}" position="${pos}" scale="${sc}"></a-gltf-model>`;
+    }
+
     document.body.insertAdjacentHTML('beforeend', `
 <a-scene id="scene"
          mindar-image="imageTargetSrc: ${DISH.mind}; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; maxTrack: 1; filterMinCF: 0.0001; filterBeta: 0.001;"
          color-space="sRGB" renderer="colorManagement: true; physicallyCorrectLights: true"
          vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
-  <a-assets><a-asset-item id="dish" src="${DISH.glb}"></a-asset-item></a-assets>
+  <a-assets>${assetHTML}</a-assets>
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
   <a-light type="ambient" intensity="1.2"></a-light>
   <a-light type="directional" intensity="1" position="0.5 1 1"></a-light>
@@ -447,7 +467,7 @@
               animation__pop="property: scale; from: 0.001 0.001 0.001; to: 1 1 1; dur: 1500; easing: easeOutBack; startEvents: popstart"
               animation__spin="property: rotation; from: 0 0 0; to: 0 0 360; dur: 1500; easing: easeOutCubic; startEvents: popstart">
       <a-entity id="zoom"><a-entity id="tilt"><a-entity id="spin">
-        <a-gltf-model src="#dish" rotation="${rot}" position="${pos}" scale="${sc}"></a-gltf-model>
+        ${entityHTML}
       </a-entity></a-entity></a-entity>
     </a-entity>
   </a-entity>
