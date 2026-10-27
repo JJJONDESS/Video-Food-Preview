@@ -22,62 +22,15 @@
   #hint { position: fixed; top: 20px; left: 0; right: 0; text-align: center; color: #fff; text-shadow: 0 1px 4px #000; font-weight: bold; }
   #errorBox { color: #ff6b6b; font-size: 0.9rem; margin-top: 20px; font-weight: bold; max-width: 300px; }
   .a-enter-vr, .a-enter-ar { display: none !important; }
-  
-  /* Hide the video element in the background */
   #arVideo { display: none; }
 </style>
+<!-- Load A-Frame and MindAR -->
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-<script>
-  // Custom Shader to remove the black background
-  AFRAME.registerShader('chromakey', {
-    schema: {
-      src: { type: 'map' },
-      similarity: { type: 'number', default: 0.25 }
-    },
-    init: function (data) {
-      // Create a VideoTexture specifically for the shader
-      const texture = new THREE.VideoTexture(document.getElementById('arVideo'));
-      texture.minFilter = THREE.LinearFilter;
-      texture.magFilter = THREE.LinearFilter;
-
-      this.material = new THREE.ShaderMaterial({
-        uniforms: {
-          uMap: { value: texture },
-          uSimilarity: { value: data.similarity }
-        },
-        vertexShader: `
-          varying vec2 vUv;
-          void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `,
-        fragmentShader: `
-          uniform sampler2D uMap;
-          uniform float uSimilarity;
-          varying vec2 vUv;
-          void main() {
-            vec4 texColor = texture2D(uMap, vUv);
-            float brightness = (texColor.r + texColor.g + texColor.b) / 3.0;
-            
-            // Delete the black background
-            if (brightness < uSimilarity) {
-              discard;
-            }
-            gl_FragColor = texColor;
-          }
-        `,
-        transparent: true,
-        side: THREE.DoubleSide
-      });
-    }
-  });
-</script>
 </head>
 <body>
 
-<!-- Video placed outside of A-Frame assets so it doesn't block loading -->
+<!-- Hidden Video (Now with transparent background) -->
 <video id="arVideo" src="dishes/Burger_animited_video.webm" loop muted playsinline crossorigin="anonymous"></video>
 
 <div id="startScreen">
@@ -98,18 +51,19 @@
 <a-scene id="scene" mindar-image="imageTargetSrc: dishes/VegPizza.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.001; filterBeta: 0.01;" 
          color-space="sRGB" vr-mode-ui="enabled: false">
   
-  <!-- Notice: No <a-assets> block anymore! -->
-
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
   <a-light type="ambient" intensity="1.2"></a-light>
 
   <a-entity id="target" mindar-image-target="targetIndex: 0">
     <a-entity id="videoWrapper">
-      <!-- Using the custom shader -->
-      <a-entity 
-        geometry="primitive: plane; width: 2; height: 1.5" 
-        material="shader: chromakey; similarity: 0.3;">
-      </a-entity>
+      <!-- Standard A-Video with alphaTest to support transparent WebM files -->
+      <a-video 
+        src="#arVideo" 
+        width="2" 
+        height="1.5" 
+        position="0 0 0" 
+        material="transparent: true; alphaTest: 0.05; side: double;">
+      </a-video>
     </a-entity>
   </a-entity>
 </a-scene>
@@ -125,17 +79,29 @@
   const videoWrapper = document.getElementById('videoWrapper');
   const camera = document.querySelector('a-camera');
 
-  // FIXED: Use 'loaded' instead of 'renderstart' so it doesn't wait for video download
-  scene.addEventListener('loaded', () => {
+  // Bulletproof loading: unlock button as soon as possible, with a 2s fallback
+  if (scene.hasLoaded) {
     startBtn.disabled = false;
     startBtn.textContent = "Start Camera";
-  });
+  } else {
+    scene.addEventListener('loaded', () => {
+      startBtn.disabled = false;
+      startBtn.textContent = "Start Camera";
+    });
+  }
+  
+  // Fallback in case 'loaded' event fails to fire
+  setTimeout(() => {
+    if (startBtn.disabled) {
+      startBtn.disabled = false;
+      startBtn.textContent = "Start Camera";
+    }
+  }, 2500);
 
   startBtn.onclick = async () => {
     startBtn.textContent = "Starting...";
     errorBox.textContent = "";
     
-    // Play the video immediately on click (bypasses browser autoplay block)
     videoEl.play().catch(e => console.log("Autoplay error:", e));
 
     try {
@@ -173,7 +139,7 @@
       
       camera.object3D.attach(videoWrapper.object3D);
       
-      // Fixed position and scale
+      // Force it to a safe distance and perfect scale
       videoWrapper.object3D.position.set(0, 0, -1.5); 
       videoWrapper.object3D.rotation.set(0, 0, 0);
       videoWrapper.object3D.scale.set(1, 1, 1); 
