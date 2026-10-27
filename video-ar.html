@@ -53,8 +53,8 @@
   <a-light type="ambient" intensity="1.2"></a-light>
 
   <a-entity id="target" mindar-image-target="targetIndex: 0">
-    <a-entity id="videoWrapper">
-      <!-- Using a standard plane with video texture -->
+    <!-- Added scale="1 1 1" here so detaching doesn't shrink it -->
+    <a-entity id="videoWrapper" scale="1 1 1">
       <a-plane 
         src="#arVideo" 
         width="2" 
@@ -132,25 +132,19 @@
     if (!isDetached) {
       if (!isFound) { alert("Point at the marker first!"); return; }
       
-      // Get Camera Position and Direction
-      const camPos = new THREE.Vector3();
-      const camDir = new THREE.Vector3();
-      camera.object3D.getWorldPosition(camPos);
-      camera.object3D.getWorldDirection(camDir);
-
-      // Move to the Scene Root (this prevents the video from disappearing)
-      scene.object3D.attach(videoWrapper.object3D);
+      // ATTACH DIRECTLY TO CAMERA (Like the GLB model)
+      camera.object3D.attach(videoWrapper.object3D);
       
-      // Force it 1.5 meters directly in front of the camera, facing the user
-      videoWrapper.object3D.position.copy(camPos).add(camDir.multiplyScalar(1.5));
-      videoWrapper.object3D.quaternion.copy(camera.object3D.quaternion);
-      videoWrapper.object3D.scale.set(1, 1, 1); 
+      // Force it exactly 1.5 meters in front of the user
+      videoWrapper.object3D.position.set(0, 0, -1.5); 
+      videoWrapper.object3D.rotation.set(0, 0, 0);
+      videoWrapper.object3D.scale.set(1, 1, 1); // Fix tiny scale bug
       
       isDetached = true;
       document.getElementById('detachBtn').textContent = "Attach Back";
       document.getElementById('hint').textContent = "Drag to move · Pinch to zoom";
     } else {
-      // Attach back to the target marker
+      // ATTACH BACK TO TARGET
       target.object3D.add(videoWrapper.object3D);
       videoWrapper.object3D.position.set(0, 0, 0);
       videoWrapper.object3D.rotation.set(0, 0, 0);
@@ -165,7 +159,7 @@
 
   document.getElementById('exitBtn').onclick = () => location.reload();
 
-  // DRAG AND PINCH CONTROLS
+  // DRAG AND PINCH CONTROLS (Exactly like the GLB)
   const pts = new Map(); 
   let lastD = 0;
   const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
@@ -184,24 +178,17 @@
     p.x = e.clientX; p.y = e.clientY;
 
     if (pts.size === 1) {
-      // 1 FINGER: Drag in 3D space
-      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.object3D.quaternion);
-      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.object3D.quaternion);
+      // ONE FINGER: Drag left/right/up/down
+      const o = videoWrapper.object3D.position;
+      const f = scene.camera.projectionMatrix.elements[5];
+      const k = f ? (2 * (Math.abs(o.z) || 1)) / (f * window.innerHeight) : 0.002;
+      o.x += dx * k; 
+      o.y -= dy * k;
       
-      const camPos = new THREE.Vector3();
-      camera.object3D.getWorldPosition(camPos);
-      const distance = camPos.distanceTo(videoWrapper.object3D.position);
-      
-      const k = (2 * distance) / (window.innerHeight * 1.5); 
-
-      videoWrapper.object3D.position.add(right.multiplyScalar(dx * k));
-      videoWrapper.object3D.position.add(up.multiplyScalar(-dy * k));
-      
-      // Keep the video facing the camera
-      videoWrapper.object3D.quaternion.copy(camera.object3D.quaternion);
-      
+      // Prevent pushing it behind you
+      if (o.z > -0.5) o.z = -0.5; 
     } else if (pts.size === 2) {
-      // 2 FINGERS: Pinch to zoom
+      // TWO FINGERS: Pinch to zoom
       const d = dist();
       const ratio = (lastD && d) ? d / lastD : 1;
       const nz = Math.min(5, Math.max(0.2, zv * ratio)); 
