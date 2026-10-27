@@ -28,7 +28,7 @@ const DISHES = {
     name: 'Special Video Pizza',
     price: '2000',
     description: 'Watch this pizza in action!',
-    video:  'dishes/Burger_animited_video.webm', // <--- YOUR VIDEO LINK HERE
+    video:  'dishes/kling_20261028_VIDEO_Create_a_p_11', // <--- YOUR VIDEO LINK HERE
     mind:   'dishes/VegPizza.mind', // Use an existing AR target image
     poster: 'dishes/VegPizzaimage.jpg'   // Use an existing image for the menu thumbnail
   }
