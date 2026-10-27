@@ -22,14 +22,11 @@
   #hint { position: fixed; top: 20px; left: 0; right: 0; text-align: center; color: #fff; text-shadow: 0 1px 4px #000; font-weight: bold; }
   #errorBox { color: #ff6b6b; font-size: 0.9rem; margin-top: 20px; font-weight: bold; max-width: 300px; }
   .a-enter-vr, .a-enter-ar { display: none !important; }
-  #arVideo { display: none; }
 </style>
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 </head>
 <body>
-
-<video id="arVideo" src="dishes/Burger_animited_video.webm" loop muted playsinline crossorigin="anonymous"></video>
 
 <div id="startScreen">
   <h1>Video AR Test</h1>
@@ -49,19 +46,24 @@
 <a-scene id="scene" mindar-image="imageTargetSrc: dishes/VegPizza.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.001; filterBeta: 0.01;" 
          color-space="sRGB" vr-mode-ui="enabled: false">
   
+  <a-assets>
+    <!-- Video goes back inside assets so MindAR can find it -->
+    <video id="arVideo" src="dishes/Burger_animited_video.webm" preload="auto" loop="true" muted="true" playsinline crossorigin="anonymous"></video>
+  </a-assets>
+
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
   <a-light type="ambient" intensity="1.2"></a-light>
 
   <a-entity id="target" mindar-image-target="targetIndex: 0">
-    <!-- Added scale="1 1 1" here so detaching doesn't shrink it -->
+    <!-- Using standard a-video, which natively handles transparent WebM -->
     <a-entity id="videoWrapper" scale="1 1 1">
-      <a-plane 
+      <a-video 
         src="#arVideo" 
         width="2" 
         height="1.5" 
         position="0 0 0" 
-        material="transparent: true; alphaTest: 0.05; side: double; shader: flat;">
-      </a-plane>
+        material="transparent: true; alphaTest: 0.05; side: double;">
+      </a-video>
     </a-entity>
   </a-entity>
 </a-scene>
@@ -77,22 +79,11 @@
   const videoWrapper = document.getElementById('videoWrapper');
   const camera = document.querySelector('a-camera');
 
-  if (scene.hasLoaded) {
+  // Wait for A-Frame to 100% finish loading everything before unlocking the button
+  scene.addEventListener('loaded', () => {
     startBtn.disabled = false;
     startBtn.textContent = "Start Camera";
-  } else {
-    scene.addEventListener('loaded', () => {
-      startBtn.disabled = false;
-      startBtn.textContent = "Start Camera";
-    });
-  }
-  
-  setTimeout(() => {
-    if (startBtn.disabled) {
-      startBtn.disabled = false;
-      startBtn.textContent = "Start Camera";
-    }
-  }, 2500);
+  });
 
   startBtn.onclick = async () => {
     startBtn.textContent = "Starting...";
@@ -101,6 +92,12 @@
 
     try {
       const system = scene.systems['mindar-image-system'];
+      
+      // SAFETY CHECK: Make sure MindAR is completely ready
+      if (!system) {
+        throw new Error("AR engine is still loading. Please wait 2 seconds and click Try Again.");
+      }
+      
       await system.start(); 
       startScreen.style.display = 'none';
       arUI.style.display = 'block';
@@ -132,19 +129,19 @@
     if (!isDetached) {
       if (!isFound) { alert("Point at the marker first!"); return; }
       
-      // ATTACH DIRECTLY TO CAMERA (Like the GLB model)
+      // DETACH: Attach directly to the camera
       camera.object3D.attach(videoWrapper.object3D);
       
       // Force it exactly 1.5 meters in front of the user
       videoWrapper.object3D.position.set(0, 0, -1.5); 
       videoWrapper.object3D.rotation.set(0, 0, 0);
-      videoWrapper.object3D.scale.set(1, 1, 1); // Fix tiny scale bug
+      videoWrapper.object3D.scale.set(1, 1, 1); 
       
       isDetached = true;
       document.getElementById('detachBtn').textContent = "Attach Back";
       document.getElementById('hint').textContent = "Drag to move · Pinch to zoom";
     } else {
-      // ATTACH BACK TO TARGET
+      // ATTACH BACK
       target.object3D.add(videoWrapper.object3D);
       videoWrapper.object3D.position.set(0, 0, 0);
       videoWrapper.object3D.rotation.set(0, 0, 0);
@@ -159,7 +156,7 @@
 
   document.getElementById('exitBtn').onclick = () => location.reload();
 
-  // DRAG AND PINCH CONTROLS (Exactly like the GLB)
+  // DRAG AND PINCH CONTROLS
   const pts = new Map(); 
   let lastD = 0;
   const dist = () => { const [a, b] = [...pts.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
@@ -178,17 +175,13 @@
     p.x = e.clientX; p.y = e.clientY;
 
     if (pts.size === 1) {
-      // ONE FINGER: Drag left/right/up/down
       const o = videoWrapper.object3D.position;
       const f = scene.camera.projectionMatrix.elements[5];
       const k = f ? (2 * (Math.abs(o.z) || 1)) / (f * window.innerHeight) : 0.002;
       o.x += dx * k; 
       o.y -= dy * k;
-      
-      // Prevent pushing it behind you
       if (o.z > -0.5) o.z = -0.5; 
     } else if (pts.size === 2) {
-      // TWO FINGERS: Pinch to zoom
       const d = dist();
       const ratio = (lastD && d) ? d / lastD : 1;
       const nz = Math.min(5, Math.max(0.2, zv * ratio)); 
