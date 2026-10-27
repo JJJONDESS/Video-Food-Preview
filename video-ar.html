@@ -47,7 +47,6 @@
          color-space="sRGB" vr-mode-ui="enabled: false">
   
   <a-assets>
-    <!-- Video goes back inside assets so MindAR can find it -->
     <video id="arVideo" src="dishes/Burger_animited_video.webm" preload="auto" loop="true" muted="true" playsinline crossorigin="anonymous"></video>
   </a-assets>
 
@@ -55,14 +54,15 @@
   <a-light type="ambient" intensity="1.2"></a-light>
 
   <a-entity id="target" mindar-image-target="targetIndex: 0">
-    <!-- Using standard a-video, which natively handles transparent WebM -->
-    <a-entity id="videoWrapper" scale="1 1 1">
+    <a-entity id="videoWrapper">
+      <!-- FIXED: Added frustumCulled="false" to prevent the video from disappearing -->
       <a-video 
         src="#arVideo" 
         width="2" 
         height="1.5" 
         position="0 0 0" 
-        material="transparent: true; alphaTest: 0.05; side: double;">
+        frustumCulled="false"
+        material="shader: flat; transparent: true; alphaTest: 0.05; side: double;">
       </a-video>
     </a-entity>
   </a-entity>
@@ -79,7 +79,6 @@
   const videoWrapper = document.getElementById('videoWrapper');
   const camera = document.querySelector('a-camera');
 
-  // Wait for A-Frame to 100% finish loading everything before unlocking the button
   scene.addEventListener('loaded', () => {
     startBtn.disabled = false;
     startBtn.textContent = "Start Camera";
@@ -92,12 +91,7 @@
 
     try {
       const system = scene.systems['mindar-image-system'];
-      
-      // SAFETY CHECK: Make sure MindAR is completely ready
-      if (!system) {
-        throw new Error("AR engine is still loading. Please wait 2 seconds and click Try Again.");
-      }
-      
+      if (!system) throw new Error("AR engine is still loading. Please wait a moment.");
       await system.start(); 
       startScreen.style.display = 'none';
       arUI.style.display = 'block';
@@ -129,19 +123,21 @@
     if (!isDetached) {
       if (!isFound) { alert("Point at the marker first!"); return; }
       
-      // DETACH: Attach directly to the camera
+      // Attach to camera
       camera.object3D.attach(videoWrapper.object3D);
       
-      // Force it exactly 1.5 meters in front of the user
-      videoWrapper.object3D.position.set(0, 0, -1.5); 
+      // FIXED: Placed exactly 2 meters in front, removed the scale bug
+      videoWrapper.object3D.position.set(0, 0, -2); 
       videoWrapper.object3D.rotation.set(0, 0, 0);
-      videoWrapper.object3D.scale.set(1, 1, 1); 
+      
+      // Ensure video keeps playing
+      videoEl.play().catch(e => console.log(e));
       
       isDetached = true;
       document.getElementById('detachBtn').textContent = "Attach Back";
       document.getElementById('hint').textContent = "Drag to move · Pinch to zoom";
     } else {
-      // ATTACH BACK
+      // Attach back to target marker
       target.object3D.add(videoWrapper.object3D);
       videoWrapper.object3D.position.set(0, 0, 0);
       videoWrapper.object3D.rotation.set(0, 0, 0);
@@ -177,9 +173,15 @@
     if (pts.size === 1) {
       const o = videoWrapper.object3D.position;
       const f = scene.camera.projectionMatrix.elements[5];
-      const k = f ? (2 * (Math.abs(o.z) || 1)) / (f * window.innerHeight) : 0.002;
+      const h = window.innerHeight;
+      // FIXED: Use a safe multiplier if o.z is weird
+      const z = Math.abs(o.z) || 2;
+      const k = f ? (2 * z) / (f * h) : 0.002;
+      
       o.x += dx * k; 
       o.y -= dy * k;
+      
+      // Prevent pushing it behind you
       if (o.z > -0.5) o.z = -0.5; 
     } else if (pts.size === 2) {
       const d = dist();
